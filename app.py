@@ -15,44 +15,74 @@ STATIC_GETFRIEND = bytes.fromhex(STATIC_GETFRIEND_HEX)
 REAL_HOST = "client.ind.freefiremobile.com"
 REAL_BASE = f"https://{REAL_HOST}"
 
+# Toggle: set to "static" or "forward" via env var FORWARD_GETFRIEND
+FORWARD_MODE = os.environ.get("GETFRIEND_MODE", "static").lower()
+
 app = Flask(__name__)
+
+# Simple stdout logging (visible in Vercel logs)
+def log(msg):
+    sys.stdout.write(msg + "\n")
+    sys.stdout.flush()
 
 @app.route("/", defaults={"path": ""}, methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"])
 @app.route("/<path:path>", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"])
 def proxy(path):
-    # Build full path (including query string)
     full_path = request.full_path if request.query_string else path
     if not full_path.startswith("/"):
         full_path = "/" + full_path
 
-    # Special case: /GetFriend
-    if full_path == "/GetFriend":
-        return Response(STATIC_GETFRIEND, status=200, mimetype="application/octet-stream")
+    log(f"--> {request.method} {full_path}")
 
-    # Forward to real server
+    # ---------------------------------------------
+    # /GetFriend – static or forwarded
+    # ---------------------------------------------
+    if full_path == "/GetFriend":
+        if FORWARD_MODE == "forward":
+            log("  => Forwarding /GetFriend to real server")
+            return forward_request(full_path)
+        else:
+            log("  => Serving static /GetFriend response")
+            # Mimic real server headers (as seen in /GetLoginData logs)
+            return Response(
+                STATIC_GETFRIEND,
+                status=200,
+                headers={
+                    "Content-Type": "application/octet-stream",
+                    "Content-Length": str(len(STATIC_GETFRIEND)),
+                    "Connection": "close"
+                }
+            )
+
+    # ---------------------------------------------
+    # All other endpoints – forward to real server
+    # ---------------------------------------------
+    return forward_request(full_path)
+
+def forward_request(full_path):
     real_url = REAL_BASE + full_path
     headers = {k: v for k, v in request.headers.items()
                if k.lower() not in ("content-length", "connection", "transfer-encoding", "host")}
     data = request.get_data()
 
     try:
-        # Use requests to forward
         resp = requests.request(
             method=request.method,
             url=real_url,
             headers=headers,
             data=data,
             timeout=15,
-            verify=True   # For HTTPS
+            verify=True
         )
-        # Build response
-        excluded_headers = ("content-length", "connection", "transfer-encoding")
-        response_headers = [(k, v) for k, v in resp.raw.headers.items() if k.lower() not in excluded_headers]
+        log(f"<-- {real_url} -> {resp.status_code} ({len(resp.content)} bytes)")
+        # Build response (strip hop-by-hop headers)
+        excluded = ("content-length", "connection", "transfer-encoding")
+        response_headers = [(k, v) for k, v in resp.raw.headers.items() if k.lower() not in excluded]
         return Response(resp.content, status=resp.status_code, headers=response_headers)
     except Exception as e:
-        # Return 502 Bad Gateway
+        log(f"!! Proxy error: {e}")
         return Response(f"Proxy error: {e}", status=502, mimetype="text/plain")
 
 if __name__ == "__main__":
-    # For local testing (optional)
+    # For local testing – run with `python app.py`
     app.run(host="0.0.0.0", port=8080)
