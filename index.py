@@ -20,7 +20,7 @@ import blackboxprotobuf
 # ============================================================
 # HARDCODE YOUR ACCESS TOKEN HERE
 # ============================================================
-USER_ACCESS_TOKEN = "YOUR_ACCESS_TOKEN_HERE"   # <-- Replace with your token
+USER_ACCESS_TOKEN = "0124c9a79d585c25a9175f47ab0c83c52e78451fa56913d4678c5f9ad159e001"   # <-- Replace with your token
 
 # ------------------------------------------------------------
 # Constants from original script
