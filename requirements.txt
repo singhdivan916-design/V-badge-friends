@@ -1,2 +1,4 @@
-flask
-requests
+requests>=2.31.0
+pycryptodome>=3.19.0
+protobuf>=4.25.0
+blackboxprotobuf>=0.1.1
